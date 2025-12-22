@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+numpy
+qdrant-client
+transformers
+torch
+tree-sitter
+tree-sitter-languages
+pydantic
+requests
+python-dotenv
