@@ -3,29 +3,21 @@
 from typing import List, Dict, Any
 import uuid
 
-import numpy as np
 from qdrant_client.models import PointStruct
 
 from app.db.qdrant import client
+from app.services.embedding import embed_code_chunks
 
-
-VECTOR_SIZE = 768  # must match qdrant VECTOR_SIZE
-
-
-def embed_code_dummy(texts: List[str]) -> List[List[float]]:
-    """
-    Temporary dummy embedding function.
-    Later we'll replace this with a real CodeBERT-based embedding.
-    """
-    return np.random.rand(len(texts), VECTOR_SIZE).astype("float32").tolist()
+VECTOR_SIZE = 768  # must match CodeBERT + qdrant config
 
 
 def index_chunks(chunks: List[Dict[str, Any]], repo_id: str):
-    """
-    Take parsed code chunks and index them into Qdrant.
-    """
+    if not chunks:
+        print(f"No chunks to index for repo_id={repo_id}. Skipping Qdrant upsert.")
+        return
+
     texts = [c["code"] for c in chunks]
-    vectors = embed_code_dummy(texts)
+    vectors = embed_code_chunks(texts)  # REAL embeddings
 
     points = []
     for chunk, vec in zip(chunks, vectors):

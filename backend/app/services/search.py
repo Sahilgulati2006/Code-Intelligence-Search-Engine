@@ -1,18 +1,14 @@
 # app/services/search.py
 
 from typing import List
-import numpy as np
-
 from app.db.qdrant import client
-from app.services.indexing import VECTOR_SIZE
-
-
-def embed_query_dummy(text: str) -> List[float]:
-    return np.random.rand(VECTOR_SIZE).astype("float32").tolist()
+from app.services.embedding import embed_query_text
+from app.services.indexing import VECTOR_SIZE  # still 768
 
 
 def search_code(query: str, top_k: int = 5, repo_id=None, language=None):
-    query_vec = embed_query_dummy(query)
+    # REAL embedding for query
+    query_vec = embed_query_text(query)
 
     hits = client.search(
         collection_name="code_chunks",
