@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import CodeBlock from "./components/CodeBlock";
 
 type SearchResult = {
   score: number;
@@ -269,9 +270,11 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  <pre className="mt-4 max-h-[520px] overflow-auto rounded-2xl border border-slate-800 bg-slate-950 p-4 text-[12px] leading-snug">
-                    <code className="text-slate-100">{isExpanded ? code : preview}</code>
-                  </pre>
+                  <CodeBlock
+                  code={isExpanded ? code : preview}
+                  language={r.language}
+                  />
+
 
                   {truncated && !isExpanded && (
                     <div className="mt-2 text-xs text-slate-500">

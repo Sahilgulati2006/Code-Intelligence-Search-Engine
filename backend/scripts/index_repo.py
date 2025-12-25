@@ -6,10 +6,16 @@ from app.db.qdrant import init_collection
 from app.services.parsing import extract_python_functions
 from app.services.indexing import index_chunks
 
+from collections import Counter
+
+
+
 def main(repo_path: str, repo_id: str):
     init_collection()  # safe to call multiple times; recreates collection
     chunks = extract_python_functions(repo_path)
-    print(f"Found {len(chunks)} python functions")
+    print(f"Extracted {len(chunks)} chunks total")
+    print("Chunk type distribution:", Counter(c["symbol_type"] for c in chunks))
+
     index_chunks(chunks, repo_id)
     print("Indexing complete")
 
