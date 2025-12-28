@@ -1,11 +1,11 @@
 # app/services/search.py
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 from app.db.qdrant import client
-from app.services.embedding import embed_query_text
+from app.services.embedding import embed_query_text, embed_code_chunks
 from app.services.indexing import VECTOR_SIZE  # still 768
 
 # Minimum similarity score threshold (cosine similarity, ranges from -1 to 1)
@@ -162,4 +162,145 @@ def search_code(
             }
         )
 
+    return results
+
+
+def search_similar_code(
+    code: str,
+    top_k: int = 5,
+    repo_id: Optional[str] = None,
+    language: Optional[str] = None,
+    exclude_self: bool = True,
+    min_score: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Find code chunks similar to the given code snippet using vector similarity.
+    This enables code-to-code search (finding duplicate/similar code patterns).
+    
+    Args:
+        code: Code snippet to find similar code for
+        top_k: Maximum number of results to return
+        repo_id: Optional repository filter (empty strings treated as None)
+        language: Optional language filter (e.g., 'python', empty strings treated as None)
+        exclude_self: If True, excludes results that exactly match the input code
+        min_score: Optional minimum similarity score threshold (defaults to MIN_SCORE_THRESHOLD)
+    
+    Returns:
+        List of search results with similar code chunks and metadata
+    """
+    # Normalize code
+    code = code.strip()
+    
+    if not code:
+        return []
+    
+    # Normalize filter values (handle empty strings)
+    repo_id = _normalize_filter_value(repo_id)
+    language = _normalize_filter_value(language)
+    
+    # Use default min_score if not provided (None means no threshold)
+    if min_score is None:
+        min_score = MIN_SCORE_THRESHOLD
+    
+    # Embed the code snippet using CodeBERT
+    # Use embed_code_chunks since we're searching by code, not natural language
+    code_vec = embed_code_chunks([code])[0]
+    
+    # Build optional filter (only add if values are not None/empty)
+    q_filter: Optional[Filter] = None
+    conditions: List[FieldCondition] = []
+    
+    if repo_id:
+        conditions.append(
+            FieldCondition(
+                key="repo_id",
+                match=MatchValue(value=repo_id),
+            )
+        )
+    
+    if language:
+        conditions.append(
+            FieldCondition(
+                key="language",
+                match=MatchValue(value=language),
+            )
+        )
+    
+    if conditions:
+        q_filter = Filter(must=conditions)
+    
+    try:
+        # Use query_points with the code vector to find similar code
+        query_params = {
+            "collection_name": "code_chunks",
+            "query": code_vec,
+            "limit": top_k + (1 if exclude_self else 0),  # Fetch one extra if excluding self
+            "with_payload": True,
+            "with_vectors": False,
+        }
+        
+        # Add optional filters only if they exist
+        if q_filter is not None:
+            query_params["query_filter"] = q_filter
+        
+        # Add score threshold only if specified
+        if min_score is not None:
+            query_params["score_threshold"] = min_score
+        
+        response = client.query_points(**query_params)
+    except Exception as e:
+        # Log error with more details and return empty results
+        print(f"Error during similar code search: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+    
+    results = []
+    # Track seen results to avoid duplicates
+    seen_results = set()
+    
+    # QueryResponse.points is a List[ScoredPoint] (already sorted by score descending)
+    for point in response.points:
+        payload = point.payload or {}
+        
+        # Skip results with missing essential data
+        if not payload.get("code"):
+            continue
+        
+        # Exclude exact matches if requested
+        if exclude_self:
+            payload_code = payload.get("code", "").strip()
+            if payload_code == code:
+                continue
+        
+        # Create a unique key for deduplication
+        result_key = (
+            payload.get("file_path"),
+            payload.get("start_line"),
+            payload.get("symbol_name"),
+        )
+        
+        # Skip duplicates
+        if result_key in seen_results:
+            continue
+        seen_results.add(result_key)
+        
+        results.append(
+            {
+                "score": float(point.score),
+                "repo_id": payload.get("repo_id"),
+                "file_path": payload.get("file_path"),
+                "language": payload.get("language"),
+                "symbol_type": payload.get("symbol_type"),
+                "symbol_name": payload.get("symbol_name"),
+                "start_line": payload.get("start_line"),
+                "end_line": payload.get("end_line"),
+                "code": payload.get("code"),
+            }
+        )
+        
+        # Stop if we have enough results (after filtering)
+        if len(results) >= top_k:
+            break
+    
     return results

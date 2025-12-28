@@ -25,3 +25,12 @@ class SearchResultItem(BaseModel):
 
 class SearchResponse(BaseModel):
     results: List[SearchResultItem]
+
+
+class SimilarSearchRequest(BaseModel):
+    code: str  # The code snippet to find similar code for
+    top_k: int = 5
+    repo_id: Optional[str] = None
+    language: Optional[str] = None
+    exclude_self: bool = True  # Exclude the exact same code chunk
+    min_score: Optional[float] = None  # Optional minimum similarity threshold

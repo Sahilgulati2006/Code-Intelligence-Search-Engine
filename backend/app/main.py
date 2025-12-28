@@ -3,8 +3,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.models.search import SearchRequest, SearchResponse
-from app.services.search import search_code
+from app.models.search import SearchRequest, SearchResponse, SimilarSearchRequest
+from app.services.search import search_code, search_similar_code
 
 app = FastAPI(title="Code Intelligence Backend")
 
@@ -35,5 +35,22 @@ def search_endpoint(body: SearchRequest):
         top_k=body.top_k,
         repo_id=body.repo_id,
         language=body.language,
+    )
+    return SearchResponse(results=results)
+
+
+@app.post("/search/similar", response_model=SearchResponse)
+def search_similar_endpoint(body: SimilarSearchRequest):
+    """
+    Find code chunks similar to the provided code snippet.
+    This enables code-to-code search for finding duplicate/similar code patterns.
+    """
+    results = search_similar_code(
+        code=body.code,
+        top_k=body.top_k,
+        repo_id=body.repo_id,
+        language=body.language,
+        exclude_self=body.exclude_self,
+        min_score=body.min_score,
     )
     return SearchResponse(results=results)
