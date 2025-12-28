@@ -3,7 +3,7 @@
 import sys
 
 from app.db.qdrant import init_collection
-from app.services.parsing import extract_python_functions
+from app.services.parsing import extract_code_chunks
 from app.services.indexing import index_chunks
 
 from collections import Counter
@@ -12,7 +12,7 @@ from collections import Counter
 
 def main(repo_path: str, repo_id: str):
     init_collection()  # safe to call multiple times; recreates collection
-    chunks = extract_python_functions(repo_path)
+    chunks = extract_code_chunks(repo_path)
     print(f"Extracted {len(chunks)} chunks total")
     print("Chunk type distribution:", Counter(c["symbol_type"] for c in chunks))
 

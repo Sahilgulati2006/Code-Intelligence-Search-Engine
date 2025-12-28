@@ -14,7 +14,7 @@ type SearchResult = {
 };
 
 const API_BASE = "http://127.0.0.1:8000";
-const DEFAULT_REPO_ID = "github.com/pallets/flask";
+const DEFAULT_REPO_ID = "fastapi-lib"; // Match the repo_id in the database
 
 function truncateLines(code: string, maxLines: number) {
   const lines = code.split("\n");
