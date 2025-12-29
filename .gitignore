@@ -1,3 +1,16 @@
-# Ignore locally cloned repos used for indexing
+# Local database and data
+backend/qdrant_storage/
 backend/data/
 
+# Python cache and logs
+**/__pycache__/
+*.pyc
+*.log
+backend/backend_uvicorn.log
+
+# System files
+.DS_Store
+
+# Virtual Environment
+venv/
+.venv/
