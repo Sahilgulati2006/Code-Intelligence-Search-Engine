@@ -10,9 +10,23 @@ import { DEFAULT_REPO_ID, keyFor, Icons } from "./utils/constants";
 
 const App: React.FC = () => {
   const [query, setQuery] = useState("");
-  const [repoId, setRepoId] = useState(DEFAULT_REPO_ID);
+  const [repoId, setRepoId] = useState<string | null>(null);
   const [language, setLanguage] = useState("python");
   const [topK, setTopK] = useState(5);
+
+  React.useEffect(() => {
+    const last = localStorage.getItem("lastIndexedRepo");
+    if (last) setRepoId(last);
+    else setRepoId(DEFAULT_REPO_ID);
+
+    const handler = (e: any) => {
+      const ownerRepo = e?.detail?.ownerRepo;
+      if (ownerRepo) setRepoId(ownerRepo);
+    };
+
+    window.addEventListener('repoIndexed', handler as EventListener);
+    return () => window.removeEventListener('repoIndexed', handler as EventListener);
+  }, []);
 
   const { loading, results, error, search } = useSearch();
   const {

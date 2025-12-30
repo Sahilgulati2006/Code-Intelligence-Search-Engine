@@ -7,16 +7,32 @@ VECTOR_SIZE = 768  # CodeBERT dimension size
 
 client = QdrantClient(url="http://localhost:6333")
 
-def init_collection():
+def init_collection(reset: bool = False):
     """
-    Creates or resets the Qdrant collection for code chunks.
-    Call this once before indexing.
+    Ensure the Qdrant collection for code chunks exists.
+    If `reset` is True, the collection will be recreated (clearing existing data).
     """
-    client.recreate_collection(
-        collection_name="code_chunks",
-        vectors_config=VectorParams(
-            size=VECTOR_SIZE,
-            distance=Distance.COSINE
-        ),
-    )
-    print("Qdrant collection 'code_chunks' initialized.")
+    try:
+        # Check if collection exists
+        client.get_collection(collection_name="code_chunks")
+        if reset:
+            client.recreate_collection(
+                collection_name="code_chunks",
+                vectors_config=VectorParams(
+                    size=VECTOR_SIZE,
+                    distance=Distance.COSINE
+                ),
+            )
+            print("Qdrant collection 'code_chunks' recreated.")
+        else:
+            print("Qdrant collection 'code_chunks' already exists.")
+    except Exception:
+        # Collection not found — create it
+        client.recreate_collection(
+            collection_name="code_chunks",
+            vectors_config=VectorParams(
+                size=VECTOR_SIZE,
+                distance=Distance.COSINE
+            ),
+        )
+        print("Qdrant collection 'code_chunks' initialized.")
