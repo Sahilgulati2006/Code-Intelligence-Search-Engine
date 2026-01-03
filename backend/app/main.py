@@ -1,16 +1,23 @@
 # app/main.py
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+import logging
 
 from app.models.search import SearchRequest, SearchResponse, SimilarSearchRequest
 from app.models.indexing import IndexRequest, IndexResponse, JobStatus
 from app.services.search import search_code, search_similar_code
 from app.services.parsing import extract_code_chunks
 from app.services.indexing import index_chunks
+from app.config import get_settings
+from app.security import APIKeyAuth, SecureIndexing, get_authenticated_user
+from app.rate_limit import RateLimitManager, EndpointLimits, handle_rate_limit_error
 
-from fastapi import BackgroundTasks, HTTPException
-from typing import Dict, Any
+from fastapi import BackgroundTasks, HTTPException, Depends
+from slowapi.errors import RateLimitExceeded
+from typing import Dict, Any, Optional
 import uuid
 import tempfile
 import shutil
@@ -18,20 +25,44 @@ import subprocess
 import os
 from urllib.parse import urlparse
 
-app = FastAPI(title="Code Intelligence Backend")
+# Load settings
+settings = get_settings()
+
+# Configure logging
+logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    version="1.0.0",
+    description="Semantic code search engine with hybrid search capabilities",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+)
+
+# Add rate limiter to app if enabled
+if settings.RATE_LIMIT_ENABLED:
+    logger.info(f"Rate limiting enabled: {settings.RATE_LIMIT_REQUESTS} requests per {settings.RATE_LIMIT_WINDOW}s")
+    limiter = RateLimitManager.get_limiter()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, handle_rate_limit_error)
+else:
+    logger.info("Rate limiting disabled")
+
+# Log auth status
+if settings.AUTH_ENABLED:
+    logger.info("Authentication enabled")
+else:
+    logger.info("Authentication disabled")
 
 # Simple in-memory job tracker. For production, use persistent store (Redis/DB/Queue).
 JOBS: Dict[str, Dict[str, Any]] = {}
 
-# Allow frontend dev server to call the API
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-
+# Configure CORS with settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -129,7 +160,25 @@ def _start_index_job(job_id: str, repo_url: str):
 
 
 @app.post("/index", response_model=IndexResponse, status_code=202)
-def index_repo_endpoint(body: IndexRequest, background_tasks: BackgroundTasks):
+def index_repo_endpoint(
+    body: IndexRequest,
+    background_tasks: BackgroundTasks,
+    api_key: Optional[str] = Depends(SecureIndexing.require_auth),
+):
+    """
+    Start indexing a GitHub repository.
+
+    Requires authentication if AUTH_ENABLED is true.
+    Rate limited if RATE_LIMIT_ENABLED is true.
+
+    Args:
+        body: GitHub repository URL
+        background_tasks: FastAPI background tasks
+        api_key: Optional authenticated API key
+
+    Returns:
+        Job ID for status tracking
+    """
     repo_url = str(body.repo_url)
 
     if not _is_valid_github_url(repo_url):
@@ -137,6 +186,10 @@ def index_repo_endpoint(body: IndexRequest, background_tasks: BackgroundTasks):
 
     job_id = uuid.uuid4().hex
     JOBS[job_id] = {"status": "queued", "message": "Queued for indexing", "indexed_chunks": None}
+    
+    if api_key:
+        logger.info(f"Indexing job {job_id} created by API key: {api_key}")
+    
     background_tasks.add_task(_start_index_job, job_id, repo_url)
 
     return IndexResponse(job_id=job_id, status="queued")
