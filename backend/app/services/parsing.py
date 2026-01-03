@@ -246,6 +246,18 @@ def _parse_python_with_ast(file_path: Path, source: str, rel_path: Path) -> List
             symbol_name = node.name
             code_text = "\n".join(lines[start_line - 1 : end_line])
             
+            # Extract docstring and signature for better semantic matching
+            docstring = python_ast.get_docstring(node) or ""
+            
+            # Build function signature with parameter types if available
+            args = node.args
+            param_names = [arg.arg for arg in args.args]
+            param_str = ", ".join(param_names) if param_names else ""
+            signature = f"{symbol_name}({param_str})"
+            
+            # Combine docstring + signature for semantic context
+            semantic_context = f"{signature}. {docstring}".strip() if docstring else signature
+            
             chunks.append({
                 "language": "python",
                 "symbol_type": "function",
@@ -254,6 +266,9 @@ def _parse_python_with_ast(file_path: Path, source: str, rel_path: Path) -> List
                 "start_line": start_line,
                 "end_line": end_line,
                 "code": code_text,
+                "signature": signature,
+                "docstring": docstring,
+                "semantic_context": semantic_context,
             })
             
             # Call-site chunks inside this function
@@ -284,6 +299,9 @@ def _parse_python_with_ast(file_path: Path, source: str, rel_path: Path) -> List
                         "start_line": call_line,
                         "end_line": call_line,
                         "code": call_text,
+                        "signature": None,
+                        "docstring": None,
+                        "semantic_context": call_text,
                     })
     
     return chunks
@@ -361,7 +379,24 @@ def extract_code_chunks(repo_path: str) -> List[Dict[str, Any]]:
                 continue
             
             file_chunks = []
-            
+
+            # If it's a Markdown/README file, add a document chunk so natural language queries can match repo docs
+            if language == "markdown":
+                lines = source.splitlines()
+                file_chunks.append({
+                    "language": "markdown",
+                    "symbol_type": "doc",
+                    "symbol_name": str(rel_path.name),
+                    "file_path": str(rel_path),
+                    "start_line": 1,
+                    "end_line": len(lines) or 1,
+                    "code": source,
+                })
+                parsed_files += 1
+                language_counts[language] = language_counts.get(language, 0) + 1
+                chunks.extend(file_chunks)
+                continue
+
             # Try tree-sitter first
             if TREE_SITTER_AVAILABLE:
                 try:
@@ -382,7 +417,27 @@ def extract_code_chunks(repo_path: str) -> List[Dict[str, Any]]:
                         language_counts[language] += len([c for c in file_chunks if c["symbol_type"] == "function"])
                 except Exception:
                     skipped_syntax += 1
-            
+
+            # Additionally, extract module and function docstrings for Python to help natural language queries
+            if language == "python":
+                try:
+                    import ast as python_ast
+                    tree = python_ast.parse(source)
+                    module_doc = python_ast.get_docstring(tree)
+                    if module_doc:
+                        file_chunks.append({
+                            "language": "python",
+                            "symbol_type": "doc",
+                            "symbol_name": str(rel_path.name) + ":module_doc",
+                            "file_path": str(rel_path),
+                            "start_line": 1,
+                            "end_line": 1,
+                            "code": module_doc,
+                        })
+                    # function-level docstrings will be added by _parse_python_with_ast as separate call-site chunks if present
+                except Exception:
+                    pass
+
             chunks.extend(file_chunks)
     
     print(
