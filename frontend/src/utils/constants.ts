@@ -1,4 +1,22 @@
-export const API_BASE = "http://127.0.0.1:8000";
+// Environment-based configuration
+const getApiBase = (): string => {
+  // First check if VITE_API_BASE environment variable is set
+  const env = (import.meta.env.VITE_API_BASE as string) || undefined;
+  if (env) return env;
+
+  // Fallback based on current location
+  const hostname = window.location.hostname;
+  const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+  
+  if (isLocalhost) {
+    return "http://localhost:8000";
+  }
+  
+  // For production, use same origin (backend served from same domain)
+  return `${window.location.protocol}//${window.location.host}/api`;
+};
+
+export const API_BASE = getApiBase();
 export const DEFAULT_REPO_ID = "fastapi-lib";
 
 export const Icons = {
