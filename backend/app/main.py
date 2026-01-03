@@ -14,6 +14,7 @@ from app.services.indexing import index_chunks
 from app.config import get_settings
 from app.security import APIKeyAuth, SecureIndexing, get_authenticated_user
 from app.rate_limit import RateLimitManager, EndpointLimits, handle_rate_limit_error
+from app.cache import cache_manager, SearchCache
 
 from fastapi import BackgroundTasks, HTTPException, Depends
 from slowapi.errors import RateLimitExceeded
@@ -76,12 +77,22 @@ def health_check():
 
 @app.post("/search", response_model=SearchResponse)
 def search_endpoint(body: SearchRequest):
+    # Try to get from cache first
+    cached = SearchCache.get(body.query, body.top_k, body.repo_id)
+    if cached:
+        logger.debug(f"Cache HIT for query: {body.query}")
+        return SearchResponse(results=cached)
+    
+    # Not in cache, execute search
     results = search_code(
         query=body.query,
         top_k=body.top_k,
         repo_id=body.repo_id,
         language=body.language,
     )
+    
+    # Cache the results
+    SearchCache.set(body.query, body.top_k, body.repo_id, results)
     return SearchResponse(results=results)
 
 

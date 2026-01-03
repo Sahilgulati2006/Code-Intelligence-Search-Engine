@@ -54,10 +54,18 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = Field(default="HS256", env="JWT_ALGORITHM")
     JWT_EXPIRATION_HOURS: int = Field(default=24, env="JWT_EXPIRATION_HOURS")
 
-    # Redis (optional, for caching)
-    REDIS_ENABLED: bool = Field(default=False, env="REDIS_ENABLED")
-    REDIS_URL: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
-    REDIS_CACHE_TTL: int = Field(default=3600, env="REDIS_CACHE_TTL")  # Seconds
+    # Caching (Redis/In-Memory)
+    CACHE_ENABLED: bool = Field(default=True, env="CACHE_ENABLED")  # Enable caching
+    REDIS_ENABLED: bool = Field(default=False, env="REDIS_ENABLED")  # Use Redis backend
+    REDIS_HOST: str = Field(default="localhost", env="REDIS_HOST")
+    REDIS_PORT: int = Field(default=6379, env="REDIS_PORT")
+    REDIS_DB: int = Field(default=0, env="REDIS_DB")
+    REDIS_PASSWORD: Optional[str] = Field(default=None, env="REDIS_PASSWORD")
+    
+    # Cache TTLs (in seconds)
+    CACHE_TTL_SEARCH: int = Field(default=3600, env="CACHE_TTL_SEARCH")  # 1 hour
+    CACHE_TTL_INDEX: int = Field(default=300, env="CACHE_TTL_INDEX")  # 5 minutes
+    CACHE_TTL_GENERAL: int = Field(default=1800, env="CACHE_TTL_GENERAL")  # 30 minutes
 
     # Celery (optional, for async tasks)
     CELERY_ENABLED: bool = Field(default=False, env="CELERY_ENABLED")
